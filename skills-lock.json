@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "jupyter-to-marimo": {
+      "source": "marimo-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/jupyter-to-marimo/SKILL.md",
+      "computedHash": "08a26b09bb992d3056fe8fe30bf29cd11b89dd1539f8bb298b8d85ca728b15c2"
+    },
+    "marimo-notebook": {
+      "source": "marimo-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/marimo-notebook/SKILL.md",
+      "computedHash": "56c73bca1669181c2e0c970f2276e119960b6c68d7301fd66fe33107142a89e3"
+    }
+  }
+}
