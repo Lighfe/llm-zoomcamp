@@ -138,6 +138,81 @@ def _(results_q4):
 
 @app.cell
 def _():
+    from minsearch import Index
+
+    return (Index,)
+
+
+@app.cell
+def _(Index):
+    def build_index(documents):
+        index = Index(
+            text_fields=["content"],
+            keyword_fields=["filename"]
+        )
+        index.fit(documents)
+        return index
+
+    return (build_index,)
+
+
+@app.cell
+def _(build_index, chunks):
+    index = build_index(chunks)
+    return (index,)
+
+
+@app.cell
+def _(embed, index, vindex):
+    q5 = "How do I store vectors in PostgreSQL?"
+    v5 = embed.encode(q5)
+
+    results_q5_index = index.search(q5, num_results=5)
+    results_q5_vector_index = vindex.search(v5, num_results=5)
+    return results_q5_index, results_q5_vector_index
+
+
+@app.cell
+def _(results_q5_index):
+    results_q5_index
+    return
+
+
+@app.cell
+def _(results_q5_vector_index):
+    results_q5_vector_index
+    return
+
+
+@app.function
+def rrf(result_lists, k=60, num_results=5):
+    scores = {}
+    docs = {}
+
+    for results in result_lists:
+        for rank, doc in enumerate(results):
+            key = (doc["filename"], doc["start"])
+            scores[key] = scores.get(key, 0) + 1 / (k + rank)
+            docs[key] = doc
+
+    ranked = sorted(scores, key=lambda k: scores[k], reverse=True)
+    return [docs[key] for key in ranked[:num_results]]
+
+
+@app.cell
+def _(embed, index, vindex):
+    q6 = "How do I give the model access to tools?"
+    v6 = embed.encode(q6)
+    results_q6_index = index.search(q6, num_results=5)
+    results_q6_vector_index = vindex.search(v6, num_results=5)
+
+    results_q6 = rrf([results_q6_index, results_q6_vector_index])
+    return (results_q6,)
+
+
+@app.cell
+def _(results_q6):
+    results_q6
     return
 
 
