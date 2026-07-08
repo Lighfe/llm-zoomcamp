@@ -96,6 +96,43 @@ def rrf(result_lists, k=60, num_results=5):
     return [docs[key] for key in ranked[:num_results]]
 
 
+@app.cell
+def _(index):
+    def text_search(query, num_results=5):
+        return index.search(
+            query,
+            num_results=num_results
+        )
+
+    return (text_search,)
+
+
+@app.cell
+def _(embed, vindex):
+    def vector_search(query, num_results=5):
+        query_vector = embed.encode(query)
+        return vindex.search(query_vector, num_results=num_results)
+
+    return (vector_search,)
+
+
+@app.cell
+def _(text_search, vector_search):
+    def hybrid_search(query, k=60):
+        text_results = text_search(query, num_results=10)
+        vector_results = vector_search(query, num_results=10)
+        return rrf([text_results, vector_results], k=k)
+
+    return (hybrid_search,)
+
+
+@app.cell
+def _():
+    import marimo as mo
+
+    return (mo,)
+
+
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
@@ -182,12 +219,6 @@ def _(
 
 
 @app.cell
-def _(q1_docs):
-    q1_docs
-    return
-
-
-@app.cell
 def _(documents):
     q1_filenames = {
         "01-agentic-rag/lessons/01-intro.md",
@@ -196,6 +227,12 @@ def _(documents):
     }
     q1_docs = [doc for doc in documents if doc["filename"] in q1_filenames]
     return (q1_docs,)
+
+
+@app.cell
+def _(q1_docs):
+    q1_docs
+    return
 
 
 @app.cell
@@ -209,7 +246,7 @@ def _(generate_ground_truth, q1_docs):
         records, usage = generate_ground_truth(_doc)
         ground_truth_q1.extend(records)
         usages_q1.append(usage)
-    return ground_truth_q1, usages_q1
+    return tqdm, usages_q1
 
 
 @app.cell
@@ -219,14 +256,31 @@ def _(usages_q1):
 
 
 @app.cell
-def _(ground_truth_q1):
-    q2 = ground_truth_q1[0]["question"]
+def _():
+    import pandas as pd
+
+    df_ground_truth = pd.read_csv("ground-truth.csv")
+    ground_truth = df_ground_truth.to_dict(orient="records")
+    return df_ground_truth, ground_truth
+
+
+@app.cell
+def _(df_ground_truth):
+    df_ground_truth
+    return
+
+
+@app.cell
+def _(ground_truth):
+    q2 = ground_truth[0]["question"]
+    q2
     return (q2,)
 
 
 @app.cell
-def _(index, q2):
-    r2 = index.search(q2, num_results=5)
+def _(q2, text_search):
+    r2 = text_search(q2)
+    r2
     return (r2,)
 
 
@@ -237,15 +291,110 @@ def _(q2, r2):
 
 
 @app.cell
-def _(embed, q2, vindex):
-    v3 = embed.encode(q2)
-    r3_vector_search = vindex.search(v3, num_results=5)
-    return (r3_vector_search,)
+def _(q2, vector_search):
+    r3 = vector_search(q2)
+    r3
+    return (r3,)
 
 
 @app.cell
-def _(r3_vector_search):
-    r3_vector_search   
+def _(q2, r3):
+    q2, r3[0]
+    return
+
+
+@app.function
+def compute_relevance(q, search_function):
+    doc_id = q["filename"]
+    results = search_function(query=q["question"])
+
+    relevance = []
+    for d in results:
+        relevance.append(int(d["filename"] == doc_id))
+
+    return relevance
+
+
+@app.cell
+def _(tqdm):
+    def compute_relevance_total_text(ground_truth, search_function):
+        relevance_total = []
+
+        for q in tqdm(ground_truth):
+            relevance = compute_relevance(q, search_function)
+            relevance_total.append(relevance)
+
+        return relevance_total
+
+    return (compute_relevance_total_text,)
+
+
+@app.cell
+def _(compute_relevance_total_text, ground_truth, text_search):
+    relevance_total_text_4 = compute_relevance_total_text(ground_truth, text_search)
+    return (relevance_total_text_4,)
+
+
+@app.function
+def hit_rate(relevance):
+    cnt = 0
+
+    for line in relevance:
+        if 1 in line:
+            cnt = cnt + 1
+
+    return cnt / len(relevance)
+
+
+@app.cell
+def _(relevance_total_text_4):
+    hit_rate(relevance_total_text_4)
+    return
+
+
+@app.cell
+def _(compute_relevance_total_text, ground_truth, vector_search):
+    relevance_total_vector_5 = compute_relevance_total_text(ground_truth, vector_search)
+    hit_rate(relevance_total_vector_5)
+    return (relevance_total_vector_5,)
+
+
+@app.function
+def mrr(relevance):
+    total_score = 0.0
+
+    for line in relevance:
+        for rank in range(len(line)):
+            if line[rank] == 1:
+                total_score = total_score + 1 / (rank + 1)
+                break
+
+    return total_score / len(relevance)
+
+
+@app.cell
+def _(relevance_total_vector_5):
+    mrr(relevance_total_vector_5)
+    return
+
+
+@app.cell
+def _(compute_relevance_total_text, ground_truth, hybrid_search):
+    hybrid_mrr_by_k = {}
+
+    for _k in [1, 50, 100, 200]:
+        _search = lambda query, k=_k: hybrid_search(query, k=k)
+        _relevance_total = compute_relevance_total_text(ground_truth, _search)
+        hybrid_mrr_by_k[_k] = mrr(_relevance_total)
+
+    hybrid_mrr_by_k
+    return (hybrid_mrr_by_k,)
+
+
+@app.cell
+def _(hybrid_mrr_by_k):
+    best_k = min(hybrid_mrr_by_k, key=lambda k: (-hybrid_mrr_by_k[k], k))
+    best_k
     return
 
 
